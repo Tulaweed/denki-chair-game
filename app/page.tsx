@@ -37,7 +37,7 @@ export default function DenkiChairOnline() {
     return () => unsubscribe();
   }, []);
 
-  // エントリー：名前をセットして参戦
+  // エントリーと同時に役割を選択
   const entry = (role: 'A' | 'B') => {
     if (!inputName.trim()) {
       alert("名前を入力してください");
@@ -45,31 +45,29 @@ export default function DenkiChairOnline() {
     }
     setMyRole(role);
     
-    // もしDBが空、またはゲームオーバー状態なら、完全に初期化する
+    // role 'A' が先攻(最初は座る方)、role 'B' が後攻(最初は罠を仕掛ける方)
     if (!gameState || gameState.phase === 'GAMEOVER') {
       const initialData = {
-        phase: 'CHOOSING_ORDER',
+        phase: 'SETUP', // 即ゲーム開始
         round: 1,
-        attackerSide: 'A',
-        removedChairs: [], // 空にする
+        attackerSide: 'B', // 最初はBが罠を仕掛ける
+        removedChairs: [],
         trap: null,
         defenderChoice: null,
         scores: { A: 0, B: 0 },
         shocks: { A: 0, B: 0 },
         historyA: Array(MAX_ROUNDS).fill(""),
         historyB: Array(MAX_ROUNDS).fill(""),
-        names: { A: role === 'A' ? inputName : "PLAYER A", B: role === 'B' ? inputName : "PLAYER B" }
+        names: { A: role === 'A' ? inputName : "Waiting...", B: role === 'B' ? inputName : "Waiting..." }
       };
       set(gameRef, initialData);
     } else {
-      // 既に誰か（相手）がいる場合は、自分の名前だけ更新
       const nameUpdates: any = {};
       nameUpdates[`names/${role}`] = inputName;
       update(gameRef, nameUpdates);
     }
   };
 
-  // 完全にリセットしてリロードする関数
   const resetGame = () => {
     remove(gameRef).then(() => {
       window.location.reload();
@@ -87,20 +85,28 @@ export default function DenkiChairOnline() {
             value={inputName}
             onChange={(e) => setInputName(e.target.value)}
           />
-          <div className="flex flex-col gap-3">
-            <button onClick={() => entry('A')} className="py-4 bg-red-700 font-bold hover:bg-red-600 transition">PLAYER A で参戦</button>
-            <button onClick={() => entry('B')} className="py-4 bg-blue-700 font-bold hover:bg-blue-600 transition">PLAYER B で参戦</button>
+          <div className="flex flex-col gap-4">
+            <button onClick={() => entry('A')} className="group flex flex-col items-center py-4 bg-zinc-100 text-black font-bold hover:bg-white transition relative">
+              <span className="text-xs text-zinc-500">最初に座る</span>
+              <span className="text-xl">先攻で参戦</span>
+              {gameState?.names?.A && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded">入室済</span>}
+            </button>
+            <button onClick={() => entry('B')} className="group flex flex-col items-center py-4 bg-zinc-800 text-white font-bold hover:bg-zinc-700 transition relative">
+              <span className="text-xs text-zinc-400">最初に罠を仕掛ける</span>
+              <span className="text-xl">後攻で参戦</span>
+              {gameState?.names?.B && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded">入室済</span>}
+            </button>
           </div>
-          <p className="text-[10px] text-zinc-500 mt-4 text-center">※前回のデータが残っている場合は、どちらかが参戦するとリセットされます</p>
+          <button onClick={resetGame} className="w-full mt-6 text-[10px] text-zinc-600 hover:text-zinc-400 underline">DBを強制リセット</button>
         </div>
       </div>
     );
   }
 
+  // --- ゲームロジック ---
   const isAttacker = myRole === gameState.attackerSide;
   const defenderSide = gameState.attackerSide === 'A' ? 'B' : 'A';
   const isDefender = myRole === defenderSide;
-
   const updateDB = (updates: any) => update(gameRef, updates);
 
   const handleChairClick = (index: number) => {
@@ -112,7 +118,6 @@ export default function DenkiChairOnline() {
     if (gameState.defenderChoice === null) return;
     const isHit = gameState.trap === gameState.defenderChoice;
     const points = gameState.defenderChoice + 1;
-    
     let newScores = { ...gameState.scores };
     let newShocks = { ...gameState.shocks };
     let sideKey = defenderSide === 'A' ? 'historyA' : 'historyB';
@@ -129,13 +134,7 @@ export default function DenkiChairOnline() {
       newRemoved.push(gameState.defenderChoice);
     }
 
-    updateDB({
-      scores: newScores,
-      shocks: newShocks,
-      [sideKey]: newHistory,
-      removedChairs: newRemoved,
-      phase: 'RESULT'
-    });
+    updateDB({ scores: newScores, shocks: newShocks, [sideKey]: newHistory, removedChairs: newRemoved, phase: 'RESULT' });
   };
 
   const nextTurn = () => {
@@ -143,11 +142,6 @@ export default function DenkiChairOnline() {
       updateDB({ phase: 'GAMEOVER' });
       return;
     }
-    // 第8ラウンド終了判定（簡易）
-    if (gameState.round >= MAX_ROUNDS && gameState.phase === 'RESULT' && isDefender) {
-       // 全員が全ラウンド終えたら終了
-    }
-
     const isRoundEnd = gameState.attackerSide === (gameState.historyA?.[0] === "" ? 'B' : 'A');
     updateDB({
       round: isRoundEnd ? (gameState.round || 1) + 1 : gameState.round,
@@ -158,32 +152,16 @@ export default function DenkiChairOnline() {
     });
   };
 
-  if (gameState.phase === 'CHOOSING_ORDER') {
-    return (
-      <div className="min-h-screen bg-stone-950 text-white flex flex-col items-center justify-center p-4 text-center">
-        <h2 className="text-xl font-bold mb-8 text-yellow-500 italic uppercase">Order Decision</h2>
-        <div className="flex flex-col gap-4 w-72">
-          <button onClick={() => updateDB({ attackerSide: 'B', phase: 'SETUP' })} className="py-4 bg-white text-black font-black uppercase shadow-lg">
-            {gameState.names?.A} が先攻 (座る)
-          </button>
-          <button onClick={() => updateDB({ attackerSide: 'A', phase: 'SETUP' })} className="py-4 bg-white text-black font-black uppercase shadow-lg">
-            {gameState.names?.B} が先攻 (座る)
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-stone-950 text-white p-2 font-mono flex flex-col items-center">
       {/* スコアボード */}
       <div className="w-full max-w-lg bg-black border border-zinc-700 mb-4 p-2 shadow-xl">
         <table className="w-full text-center text-[10px] border-collapse table-fixed">
           <thead>
-            <tr className="bg-zinc-900 text-zinc-500 italic uppercase">
+            <tr className="bg-zinc-900 text-zinc-500 italic">
               <th className="p-1 border-r border-zinc-800 w-16 text-[8px]">NAME</th>
               {[...Array(MAX_ROUNDS)].map((_, i) => <th key={i} className={`border-r border-zinc-800 ${gameState.round === i+1 ? 'text-yellow-500 bg-zinc-800' : ''}`}>{i+1}</th>)}
-              <th className="text-red-500 w-10 italic">TOTAL</th>
+              <th className="text-red-500 w-10">TOTAL</th>
             </tr>
           </thead>
           <tbody className="font-bold">
@@ -241,9 +219,9 @@ export default function DenkiChairOnline() {
       {/* 操作パネル */}
       <div className="w-full max-w-xs bg-zinc-900 p-6 border border-zinc-800 text-center shadow-2xl">
         <div className="h-12 mb-4 flex items-center justify-center text-[10px] text-zinc-300 italic font-bold">
-          {gameState.phase === 'SETUP' && (isAttacker ? "罠を仕掛けろ" : "相手が仕掛け中...")}
+          {gameState.phase === 'SETUP' && (isAttacker ? "罠を仕掛けろ" : "相手が潜伏中...")}
           {gameState.phase === 'BATTLE' && (isDefender ? "椅子を選択せよ" : "相手が着席... 放電せよ")}
-          {gameState.phase === 'RESULT' && (gameState.trap === gameState.defenderChoice ? "⚡️⚡️ 感電：スコア没収 ⚡️⚡️" : `SAFE！ +${(gameState.defenderChoice ?? 0) + 1} PT`)}
+          {gameState.phase === 'RESULT' && (gameState.trap === gameState.defenderChoice ? "⚡️ 感電：スコア没収 ⚡️" : `SAFE！ +${(gameState.defenderChoice ?? 0) + 1} PT`)}
           {gameState.phase === 'GAMEOVER' && `GAME OVER - WINNER: ${gameState.scores?.A > gameState.scores?.B ? gameState.names?.A : gameState.names?.B}`}
         </div>
 
@@ -255,10 +233,10 @@ export default function DenkiChairOnline() {
             <button onClick={fireShock} disabled={gameState.defenderChoice === null} className="w-full py-6 bg-red-600 text-white font-black text-2xl rounded-full border-8 border-red-900 animate-pulse active:scale-90 transition-all">放電</button>
           )}
           {gameState.phase === 'RESULT' && (
-            <button onClick={nextTurn} className="w-full py-4 bg-yellow-500 text-black font-black hover:bg-yellow-400 active:scale-95 transition-all">NEXT ROUND</button>
+            <button onClick={nextTurn} className="w-full py-4 bg-yellow-500 text-black font-black hover:bg-yellow-400 active:scale-95 transition-all uppercase italic">Next Round</button>
           )}
           {gameState.phase === 'GAMEOVER' && (
-            <button onClick={resetGame} className="w-full py-4 bg-white text-black font-black hover:bg-zinc-200 transition-all uppercase italic">New Game (DB Reset)</button>
+            <button onClick={resetGame} className="w-full py-4 bg-white text-black font-black hover:bg-zinc-200 transition-all uppercase">New Game</button>
           )}
         </div>
       </div>
