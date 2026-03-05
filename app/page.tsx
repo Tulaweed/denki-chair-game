@@ -77,7 +77,7 @@ export default function DenkiChairOnline() {
   if (!myRole || !gameState) {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
-        <h1 className="text-4xl font-black italic text-red-600 mb-8 tracking-tighter uppercase">電気イス ONLINE</h1>
+        <h1 className="text-4xl font-black italic text-red-600 mb-8 tracking-tighter uppercase">電気イスゲーム</h1>
         <div className="bg-zinc-900 p-6 border-t-4 border-red-600 w-full max-w-xs shadow-2xl">
           <input 
             className="w-full bg-black border border-zinc-700 p-3 mb-6 text-center text-lg focus:border-red-600 outline-none"
@@ -219,15 +219,15 @@ export default function DenkiChairOnline() {
       {/* 操作パネル */}
       <div className="w-full max-w-xs bg-zinc-900 p-6 border border-zinc-800 text-center shadow-2xl">
         <div className="h-12 mb-4 flex items-center justify-center text-[10px] text-zinc-300 italic font-bold">
-          {gameState.phase === 'SETUP' && (isAttacker ? "罠を仕掛けろ" : "相手が潜伏中...")}
-          {gameState.phase === 'BATTLE' && (isDefender ? "椅子を選択せよ" : "相手が着席... 放電せよ")}
+          {gameState.phase === 'SETUP' && (isAttacker ? "罠を仕掛けろ" : "相手が罠を仕掛けている")}
+          {gameState.phase === 'BATTLE' && (isDefender ? "椅子を選択せよ" : "放電せよ")}
           {gameState.phase === 'RESULT' && (gameState.trap === gameState.defenderChoice ? "⚡️ 感電：スコア没収 ⚡️" : `SAFE！ +${(gameState.defenderChoice ?? 0) + 1} PT`)}
           {gameState.phase === 'GAMEOVER' && `GAME OVER - WINNER: ${gameState.scores?.A > gameState.scores?.B ? gameState.names?.A : gameState.names?.B}`}
         </div>
 
         <div className="flex flex-col gap-3">
           {gameState.phase === 'SETUP' && isAttacker && (
-            <button onClick={() => updateDB({ phase: 'BATTLE' })} disabled={gameState.trap === null} className="w-full py-4 bg-zinc-100 text-black font-black hover:bg-white active:scale-95 transition-all shadow-lg">SET完了</button>
+            <button onClick={() => updateDB({ phase: 'BATTLE' })} disabled={gameState.trap === null} className="w-full py-4 bg-zinc-100 text-black font-black hover:bg-white active:scale-95 transition-all shadow-lg">決定</button>
           )}
           {gameState.phase === 'BATTLE' && isAttacker && (
             <button onClick={fireShock} disabled={gameState.defenderChoice === null} className="w-full py-6 bg-red-600 text-white font-black text-2xl rounded-full border-8 border-red-900 animate-pulse active:scale-90 transition-all">放電</button>
