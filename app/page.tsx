@@ -52,7 +52,7 @@ export default function DenkiChairOnline() {
         shocks: { A: 0, B: 0 },
         historyA: Array(MAX_ROUNDS).fill(null),
         historyB: Array(MAX_ROUNDS).fill(null),
-        names: { A: "PLAYER A", B: "PLAYER B" }
+        names: { A: "", B: "" }
       };
       set(gameRef, initialData);
     }
@@ -63,8 +63,8 @@ export default function DenkiChairOnline() {
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
         <h1 className="text-5xl font-black text-red-600 mb-10 italic">電気イス ONLINE</h1>
         <div className="flex gap-4">
-          <button onClick={() => entry('A')} className="p-8 bg-zinc-900 border-2 border-red-600 rounded-xl text-2xl font-bold">PLAYER A として参戦</button>
-          <button onClick={() => entry('B')} className="p-8 bg-zinc-900 border-2 border-blue-600 rounded-xl text-2xl font-bold">PLAYER B として参戦</button>
+          <button onClick={() => entry('A')} className="p-8 bg-zinc-900 border-2 border-red-600 rounded-xl text-2xl font-bold">1Pで参戦</button>
+          <button onClick={() => entry('B')} className="p-8 bg-zinc-900 border-2 border-blue-600 rounded-xl text-2xl font-bold">2Pで参戦</button>
         </div>
       </div>
     );
