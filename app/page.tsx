@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue, set, update, remove } from 'firebase/database';
 
-// --- Firebase 設定 (ご自身の値に差し替えてください) ---
+// --- Firebase 設定 (ご自身の値に必ず差し替えてください) ---
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -37,7 +37,6 @@ export default function DenkiChairOnline() {
     return () => unsubscribe();
   }, []);
 
-  // エントリーと同時に役割を選択
   const entry = (role: 'A' | 'B') => {
     if (!inputName.trim()) {
       alert("名前を入力してください");
@@ -45,12 +44,16 @@ export default function DenkiChairOnline() {
     }
     setMyRole(role);
     
-    // role 'A' が先攻(最初は座る方)、role 'B' が後攻(最初は罠を仕掛ける方)
-    if (!gameState || gameState.phase === 'GAMEOVER') {
+    // 現在のDB状態を確認
+    const currentNames = gameState?.names || {};
+    const isFirstPlayer = !gameState || !gameState.names;
+
+    if (isFirstPlayer) {
+      // 1人目の入室：DBを完全初期化
       const initialData = {
-        phase: 'SETUP', // 即ゲーム開始
+        phase: 'WAITING', // 2人目を待つ状態
         round: 1,
-        attackerSide: 'B', // 最初はBが罠を仕掛ける
+        attackerSide: 'B', 
         removedChairs: [],
         trap: null,
         defenderChoice: null,
@@ -58,13 +61,18 @@ export default function DenkiChairOnline() {
         shocks: { A: 0, B: 0 },
         historyA: Array(MAX_ROUNDS).fill(""),
         historyB: Array(MAX_ROUNDS).fill(""),
-        names: { A: role === 'A' ? inputName : "Waiting...", B: role === 'B' ? inputName : "Waiting..." }
+        names: { 
+          A: role === 'A' ? inputName : null, 
+          B: role === 'B' ? inputName : null 
+        }
       };
       set(gameRef, initialData);
     } else {
-      const nameUpdates: any = {};
-      nameUpdates[`names/${role}`] = inputName;
-      update(gameRef, nameUpdates);
+      // 2人目の入室：名前を更新し、フェーズをSETUPへ
+      const updates: any = {};
+      updates[`names/${role}`] = inputName;
+      updates[`phase`] = 'SETUP'; 
+      update(gameRef, updates);
     }
   };
 
@@ -75,6 +83,10 @@ export default function DenkiChairOnline() {
   };
 
   if (!myRole || !gameState) {
+    // どちらの枠が埋まっているか判定
+    const isAFilled = gameState?.names?.A && gameState?.names?.A !== "null";
+    const isBFilled = gameState?.names?.B && gameState?.names?.B !== "null";
+
     return (
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
         <h1 className="text-4xl font-black italic text-red-600 mb-8 tracking-tighter uppercase">電気イスゲーム</h1>
@@ -86,18 +98,26 @@ export default function DenkiChairOnline() {
             onChange={(e) => setInputName(e.target.value)}
           />
           <div className="flex flex-col gap-4">
-            <button onClick={() => entry('A')} className="group flex flex-col items-center py-4 bg-zinc-100 text-black font-bold hover:bg-white transition relative">
-              <span className="text-xs text-zinc-500">最初に座る</span>
+            <button 
+              onClick={() => !isAFilled && entry('A')} 
+              disabled={isAFilled}
+              className={`group flex flex-col items-center py-4 font-bold transition relative ${isAFilled ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-zinc-100 text-black hover:bg-white'}`}
+            >
+              <span className="text-xs">最初に座る</span>
               <span className="text-xl">先攻で参戦</span>
-              {gameState?.names?.A && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded">入室済</span>}
+              {isAFilled && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded">入室済: {gameState.names.A}</span>}
             </button>
-            <button onClick={() => entry('B')} className="group flex flex-col items-center py-4 bg-zinc-800 text-white font-bold hover:bg-zinc-700 transition relative">
+            <button 
+              onClick={() => !isBFilled && entry('B')} 
+              disabled={isBFilled}
+              className={`group flex flex-col items-center py-4 font-bold transition relative ${isBFilled ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-blue-900 text-white hover:bg-blue-800'}`}
+            >
               <span className="text-xs text-zinc-400">最初に罠を仕掛ける</span>
               <span className="text-xl">後攻で参戦</span>
-              {gameState?.names?.B && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded">入室済</span>}
+              {isBFilled && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded">入室済: {gameState.names.B}</span>}
             </button>
           </div>
-          <button onClick={resetGame} className="w-full mt-6 text-[10px] text-zinc-600 hover:text-zinc-400 underline">DBを強制リセット</button>
+          <button onClick={resetGame} className="w-full mt-6 text-[10px] text-zinc-600 hover:text-zinc-400 underline uppercase">強制リセット</button>
         </div>
       </div>
     );
@@ -158,20 +178,20 @@ export default function DenkiChairOnline() {
       <div className="w-full max-w-lg bg-black border border-zinc-700 mb-4 p-2 shadow-xl">
         <table className="w-full text-center text-[10px] border-collapse table-fixed">
           <thead>
-            <tr className="bg-zinc-900 text-zinc-500 italic">
-              <th className="p-1 border-r border-zinc-800 w-16 text-[8px]">NAME</th>
+            <tr className="bg-zinc-900 text-zinc-500 italic uppercase">
+              <th className="p-1 border-r border-zinc-800 w-16">NAME</th>
               {[...Array(MAX_ROUNDS)].map((_, i) => <th key={i} className={`border-r border-zinc-800 ${gameState.round === i+1 ? 'text-yellow-500 bg-zinc-800' : ''}`}>{i+1}</th>)}
               <th className="text-red-500 w-10">TOTAL</th>
             </tr>
           </thead>
-          <tbody className="font-bold">
+          <tbody className="font-bold uppercase">
             <tr className="border-t border-zinc-800 h-8">
-              <td className="border-r border-zinc-800 truncate px-1 text-[8px]">{gameState.names?.A}</td>
+              <td className="border-r border-zinc-800 truncate px-1 text-[8px]">{gameState.names?.A || "Waiting..."}</td>
               {gameState.historyA?.map((h:any, i:number) => <td key={i} className="border-r border-zinc-800 text-yellow-500">{h}</td>)}
               <td className="text-yellow-500 bg-zinc-900">{gameState.scores?.A || 0}</td>
             </tr>
             <tr className="border-t border-zinc-800 h-8">
-              <td className="border-r border-zinc-800 truncate px-1 text-[8px]">{gameState.names?.B}</td>
+              <td className="border-r border-zinc-800 truncate px-1 text-[8px]">{gameState.names?.B || "Waiting..."}</td>
               {gameState.historyB?.map((h:any, i:number) => <td key={i} className="border-r border-zinc-800 text-yellow-500">{h}</td>)}
               <td className="text-yellow-500 bg-zinc-900">{gameState.scores?.B || 0}</td>
             </tr>
@@ -198,7 +218,7 @@ export default function DenkiChairOnline() {
 
           return (
             <button key={i} onClick={() => !isRemoved && handleChairClick(i)} 
-              disabled={isRemoved || gameState.phase === 'RESULT'}
+              disabled={isRemoved || gameState.phase === 'RESULT' || gameState.phase === 'WAITING'}
               className={`absolute w-10 h-10 rounded-sm border flex items-center justify-center font-black text-sm transition-all duration-300 ${isRemoved ? 'opacity-0 scale-0 pointer-events-none' : ''} ${btnClass}`}
               style={{ transform: `translate(${x}px, ${y}px)` }}
             >
@@ -219,6 +239,7 @@ export default function DenkiChairOnline() {
       {/* 操作パネル */}
       <div className="w-full max-w-xs bg-zinc-900 p-6 border border-zinc-800 text-center shadow-2xl">
         <div className="h-12 mb-4 flex items-center justify-center text-[10px] text-zinc-300 italic font-bold">
+          {gameState.phase === 'WAITING' && "対戦相手の入室を待っています..."}
           {gameState.phase === 'SETUP' && (isAttacker ? "罠を仕掛けろ" : "相手が罠を仕掛けている")}
           {gameState.phase === 'BATTLE' && (isDefender ? "椅子を選択せよ" : "放電せよ")}
           {gameState.phase === 'RESULT' && (gameState.trap === gameState.defenderChoice ? "⚡️ 感電：スコア没収 ⚡️" : `SAFE！ +${(gameState.defenderChoice ?? 0) + 1} PT`)}
